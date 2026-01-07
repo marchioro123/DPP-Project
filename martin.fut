@@ -27,8 +27,8 @@ def parents_to_vtree [n] (parents: [n]i64) = -- assumes parent of root is -1
     in (ranks[0:n], ranks[n:2*n])
 
 -- parents_to_vtree [-1,0,0]
+-- parents_to_vtree [-1,0,0,1]
 -- parents_to_vtree [-1,0,1,1,1,0]
-
 
 def directed_vgraph_to_vtree [n] [m] (S_out: [n]u32) (cross_pointers: [m]i64) = -- assumes no cycles and root at index 0
     let (_, flags) = mkFlagArray S_out 0 (iota n)
@@ -39,4 +39,6 @@ def directed_vgraph_to_vtree [n] [m] (S_out: [n]u32) (cross_pointers: [m]i64) = 
 
     in parents_to_vtree ([-1] ++ parents)
 
--- directed_vgraph_to_vtree [2,1,0] [0,1,2]
+-- directed_vgraph_to_vtree [2,0,0] [0,1]
+-- directed_vgraph_to_vtree [2,1,0,0] [0,1,2]
+-- directed_vgraph_to_vtree [2,3,0,0,0,0] [0,4,1,2,3]
