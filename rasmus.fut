@@ -1,6 +1,12 @@
 -- ~~ TODO:
 
 -- ~ Perform dept and subtree finding simultaneously within the same list-ranking.
+
+-- ~ Polish undirected_grapth-parents convertion:
+--   Change root-pointer to '-1'.
+--   Convert further to vtree (with polymorphich method).
+--   Comment, analyze and test.
+
 -- ~ Write explicit return types for functions
 
 
@@ -24,7 +30,7 @@
 --   from Blelloch P. 85.
 
 
--- ~~ IDEAS:
+-- ~~ FURTHER IDEAS:
 
 -- ~ Benchamrk compare Rasmus' and Martins' conversions on different backends and compared to each other.
 -- ~ Benchmark differences between directed vs. undirected vgraph conversions.
@@ -190,7 +196,7 @@ def parents_to_vtree_naive [n]
 entry test__parents_to_vtree_naive [n] (parents: [n]i64) =
 	parents_to_vtree_naive subtree_sizes_advanced parents
 
--- ~~ DESCRIPTION: ---
+-- ~~ DESCRIPTION:
 -- ~ Test of AS3 tree 1, 2, and 3.
 -- ~ Test of V-tree from Blelloch P. 85
 -- == 
