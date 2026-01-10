@@ -1,5 +1,8 @@
 -- ~~ TODO:
 
+-- ~ Perform dept and subtree finding simultaneously within the same list-ranking.
+-- ~ Write explicit return types for functions
+
 
 -- ~~ NOTES:
 
@@ -11,7 +14,7 @@
 --   Assumes Euler tour of tree. Need for slow computatipn of subtree sizes.
 --   Simple and efficient if tree given in Euler tour and subtree sizes already known.
 
--- ~ Polymorphic subtree sizes:
+-- ~ Polymorphic subtree sizes <Fixed: now uses advanced method>:
 --   Used the naive/inefficient version at hand. Made function polymorphic as input
 --   parameter to allow for a potentially faster version to be supplied (e.g. list-
 --   ranking based or Williams idea with Blelloch's scan) 
@@ -19,6 +22,21 @@
 -- ~ Validates:
 --   Implementation validates on all three parent trees of AS3 and the example tree of
 --   from Blelloch P. 85.
+
+
+-- ~~ IDEAS:
+
+-- ~ Benchamrk compare Rasmus' and Martins' conversions on different backends and compared to each other.
+-- ~ Benchmark differences between directed vs. undirected vgraph conversions.
+
+-- ~ Perform convertions BACK from vtree to parents or to vgraphs
+-- ~ Perform advanced (unconstrained) conversion from undirected vgraph to parents.
+-- ~ Implement the splitting and merging vtree operations.
+
+
+
+
+import "helpers"
 
 
 
@@ -115,7 +133,6 @@ def subtree_sizes_advanced [n]
 						if p == -1 then -1
 						else parents[p]
 					) parents
-					|> trace
 
 			-- accumulates size updates
 			let sizes' = reduce_by_index sizes 
@@ -193,7 +210,36 @@ entry test__parents_to_vtree_naive [n] (parents: [n]i64) =
 
 --- EXPERIMENTS ---
 
--- ...
+-- If leaning = true: Assumes parent pointers are always the first pointer in each segment.
+-- If leaning = false: Assumes that parent nodes always precede their children (e.g. Euler Tour).
+def undirected_vgraph_to_parents [m] [n] (leaning: bool) (vgraph: ([m]i64, [n]i64, [n]f32)) =
+	let (segments, pointers, _) = vgraph 
+
+	let (B1, seg_dist) = mkFlagArray (map u32.i64 segments) 0 (iota m) :> ([m]u32, [n]i64)
+	let flags = map bool.i64 seg_dist with [0] = true
+	let B1 = map i64.u32 B1
+
+	let segs_start = scatter (replicate n 0) B1 B1 |> sgmScan (+) 0 flags
+	let II1 = sgmScan (+) 0 flags seg_dist
+	let II2 = sgmScan (+) 0 flags (replicate n 1) |> map (\i -> i-1) -- better method in slides
+
+	let pointer_offsets = map (\p -> II2[p]) pointers
+	let pointers' = map2 (\p o -> p-o) pointers pointer_offsets
+
+	let pointers_zip = zip3 pointers' flags (iota n)
+	let (parents', _, _) =
+		if leaning then filter (\(_, f, _) -> f) pointers_zip :> [m](i64, bool, i64)
+		else 
+			filter (\(p, _, i) ->
+				p <= segs_start[i]
+			) pointers_zip :> [m](i64, bool, i64)
+		|> unzip3
+
+	let parent_offsets =
+		[1] ++ (init segments)
+		|> scan (\s1 s2 -> s1 + s2 - 1) 0
+
+	in map (\p -> p - parent_offsets[II1[p]]) parents'
 
 
 
