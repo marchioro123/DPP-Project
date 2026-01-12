@@ -33,7 +33,7 @@
 -- ~~ FURTHER IDEAS:
 
 -- ~ Benchamrk compare Rasmus' and Martins' conversions on different backends and compared to each other.
--- ~ Benchmark differences between directed vs. undirected vgraph conversions.
+-- ~ Benchmark differences between directed vs. undirected vgraph conversions <hard to random generate large trees>.
 
 -- ~ Perform convertions BACK from vtree to parents or to vgraphs
 -- ~ Perform advanced (unconstrained) conversion from undirected vgraph to parents.
@@ -216,36 +216,88 @@ entry test__parents_to_vtree_naive [n] (parents: [n]i64) =
 
 --- EXPERIMENTS ---
 
--- If leaning = true: Assumes parent pointers are always the first pointer in each segment.
--- If leaning = false: Assumes that parent nodes always precede their children (e.g. Euler Tour).
-def undirected_vgraph_to_parents [m] [n] (leaning: bool) (vgraph: ([m]i64, [n]i64, [n]f32)) =
+-- Constrained conversion. Assumes a graph with no cycles, where root node has a self-pointer. 
+-- If euler_tour == true: Assumes parent pointers are always the first pointer in each segment.
+-- If euler_tour == false: Assumes that parent nodes always precede their children (e.g. Euler Tour).
+def undirected_vgraph_to_parents_constrained [m] [n] (euler_tour: bool) 
+											 (vgraph: ([m]i64, [n]i64, [n]f32)) =
 	let (segments, pointers, _) = vgraph 
 
-	let (B1, seg_dist) = mkFlagArray (map u32.i64 segments) 0 (iota m) :> ([m]u32, [n]i64)
-	let flags = map bool.i64 seg_dist with [0] = true
-	let B1 = map i64.u32 B1
+	let (segs_start, segs_dist) = mkFlagArray (map u32.i64 segments) 0 (iota m) :> ([m]u32, [n]i64)
+	let flags = map bool.i64 segs_dist with [0] = true
+	let segs_start = map i64.u32 segs_start -- B1 array
 
-	let segs_start = scatter (replicate n 0) B1 B1 |> sgmScan (+) 0 flags
-	let II1 = sgmScan (+) 0 flags seg_dist
-	let II2 = sgmScan (+) 0 flags (replicate n 1) |> map (\i -> i-1) -- better method in slides
+	let po_seg = sgmScan (+) 0 flags segs_dist -- II1
+	let po_segstart = scatter (replicate n 0) segs_start segs_start |> sgmScan (+) 0 flags
+	let po_order = sgmScan (+) 0 flags (replicate n 1) |> map (\i -> i-1) -- II2 <better method in slides>
+	let segment_offsets = [1] ++ (init segments) |> scan (\s1 s2 -> s1 + s2 - 1) 0
 
-	let pointer_offsets = map (\p -> II2[p]) pointers
-	let pointers' = map2 (\p o -> p-o) pointers pointer_offsets
+	let pointers_norm = map (\p -> p - po_order[p]) pointers
+	let po_flgs_ids = zip3 pointers_norm flags (iota n)
 
-	let pointers_zip = zip3 pointers' flags (iota n)
-	let (parents', _, _) =
-		if leaning then filter (\(_, f, _) -> f) pointers_zip :> [m](i64, bool, i64)
+	let (pointer_ps, _, _) =
+		if euler_tour
+		then 
+			filter (\(p, _, i) -> p <= po_segstart[i])
+				po_flgs_ids :> [m](i64, bool, i64)
 		else 
-			filter (\(p, _, i) ->
-				p <= segs_start[i]
-			) pointers_zip :> [m](i64, bool, i64)
+			filter (\(_, f, _) -> f)
+				po_flgs_ids :> [m](i64, bool, i64)
 		|> unzip3
 
-	let parent_offsets =
-		[1] ++ (init segments)
-		|> scan (\s1 s2 -> s1 + s2 - 1) 0
+	in map (\i -> 
+		let segment = po_seg[pointer_ps[i]]
+		in if segment == i then -1
+		   else pointer_ps[i] - segment_offsets[segment]
+	) (indices pointer_ps)
 
-	in map (\p -> p - parent_offsets[II1[p]]) parents'
+
+
+-- Unconstrained conversion. Assumes a fully connected graph with no cycles. 
+-- 'root' given as index of root node in 'segments' array.
+def undirected_vgraph_to_parents_full [m] [n] (root: i64)
+									  (vgraph: ([m]i64, [n]i64, [m]f32)) =
+	
+	let (segments, pointers, _) = vgraph
+
+	let (segs_start, segs_dist) = mkFlagArray (map u32.i64 segments) 0 (iota m) :> ([m]u32, [n]i64)
+	let flags = map bool.i64 segs_dist with [0] = true
+	let segs_start = map i64.u32 segs_start -- B1 array
+
+	let po_seg = sgmScan (+) 0 flags segs_dist -- II1 
+	let po_active = map (\p -> p == root) po_seg
+	let po_ids = map2 (\p a -> if a then p else -1) pointers po_active
+	let po_parents = replicate n false
+
+	let (po_parents', _) =
+		loop (po_parents, po_ids)
+		while any (\p -> p != -1) po_ids do
+
+			let po_parents' = scatter po_parents po_ids (replicate n true)
+			let seg_ids = map (\p -> if p == -1 then -1 else po_seg[p]) po_ids
+			let segs_active = scatter (replicate m false) seg_ids (replicate n true)
+			let po_ids' = map2 (\i ps -> if segs_active[po_seg[i]] && not ps then pointers[i] else -1) (iota n) po_parents'
+
+			in (po_parents', po_ids')
+		
+	let po_parents'' = po_parents' with [segs_start[root]] = true
+	let po_order = sgmScan (+) 0 flags (replicate n 1) |> map (\i -> i-1) -- II2 <better method in slides>
+	let seg_offs = [1] ++ (init segments) |> scan (\s1 s2 -> s1 + s2 - 1) 0
+
+	let pointers_norm = map (\p -> p - po_order[p]) pointers
+	let (parents_, _) = zip pointers_norm po_parents'' |> filter (\(_, ps) -> ps) |> unzip :> ([m]i64, [m]bool)
+
+	in map (\i -> 
+		let seg = po_seg[parents_[i]]
+		in parents_[i] - seg_offs[seg]
+	) (iota m) with [root] = -1
+
+	-- test (binary tree of depth 2):   undirected_vgraph_to_parents_full 3 ([1,1,3,2,3,1,1], [2, 3, 0,1,5, 4,7, 6,10,11, 8, 9], (replicate 7 0))
+	-- test (minimal tree):             undirected_vgraph_to_parents_full 1 ([1,2,1], [1,0,3,2], (replicate 3 0))
+
+
+
+
 
 
 
@@ -301,3 +353,8 @@ def undirected_vgraph_to_parents [m] [n] (leaning: bool) (vgraph: ([m]i64, [n]i6
 -- 			in  (R', parents', completed)
 
 -- 	in R
+
+
+
+	-- in zip parents' (indices parents')
+	--    |> map (\(p, i) -> if II1[p] == i then -1 else p - parent_offsets[II1[p]])
