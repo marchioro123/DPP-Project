@@ -41,3 +41,13 @@ def sgmScan 't [n] (op: t->t->t) (ne: t)
          ) (false,ne)
   let (_, vals) = unzip flgs_vals
   in vals
+
+def find_index 'a [n] (p: a -> bool) (as: [n]a): i64 =
+  let op (x, i) (y, j) =
+    if x && y then if i < j
+                   then (x, i)
+                   else (y, j)
+    else if y then (y, j)
+    else (x, i)
+  in (reduce_comm op (false, -1) (zip (map p as) (iota n))).1
+  
