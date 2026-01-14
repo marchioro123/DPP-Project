@@ -1,12 +1,5 @@
 -- ~~ TODO:
 
--- ~ Perform dept and subtree finding simultaneously within the same list-ranking.
-
--- ~ Polish undirected_grapth-parents convertion:
---   Change root-pointer to '-1'.
---   Convert further to vtree (with polymorphich method).
---   Comment, analyze and test.
-
 -- ~ Write explicit return types for functions
 
 
@@ -16,17 +9,12 @@
 --   To simplify code we have let the root pointer be -1 as opposed to self-referencing
 --   pointer.
 
--- ~ Naive conversion version:
---   Assumes Euler tour of tree. Need for slow computatipn of subtree sizes.
+-- ~ Naive parent-vtree conversion version:
+--   Assumes Euler tour of tree (like some other general operations). Need for slow computatipn of subtree sizes.
 --   Simple and efficient if tree given in Euler tour and subtree sizes already known.
 
--- ~ Polymorphic subtree sizes <Fixed: now uses advanced method>:
---   Used the naive/inefficient version at hand. Made function polymorphic as input
---   parameter to allow for a potentially faster version to be supplied (e.g. list-
---   ranking based or Williams idea with Blelloch's scan) 
-
 -- ~ Validates:
---   Implementation validates on all three parent trees of AS3 and the example tree of
+--   Implementation validate on all three parent trees of AS3 and the example tree of
 --   from Blelloch P. 85.
 
 
@@ -41,114 +29,17 @@
 
 
 
-
 import "helpers"
+import "martin"
+
+type constraint = #inner | #outer | #full
 
 
 
--- | 'find_depths' helper function.
--- Accumulates depth updates.
--- Work: O(n), Span: O(1)
-def update_depths [n] (depths: [n]i64) (parents: [n]i64) 
-			 : ([n]i64, [n]i64) =
 
-	-- if completed or root: Do nothing.
-	-- else: Add previous depth.
-	let f i = if parents[i] == -1 || parents[i] == n
-			  then (depths[i], parents[i])
-			  else (depths[i] + depths[parents[i]], 
-			  		parents[parents[i]])
-
-	in unzip (tabulate n f)
-
-
--- | Computes the depth vector of a plain tree 
--- (given its parent vector with -1 root pointer)
--- through Wyllie-like list-ranking.
--- Work: O(n lg n), Span: O(lg n)
-def find_depths [n] (parents: [n]i64) : [n]i64 =
-	let depths = map (\p -> if p == -1 then 0 else 1) parents
-		    	 -- ^^ initial depths (with root pointer of -1)
-
-	let (depths, _) = -- (Wyllie ranking)
-		loop (depths, parents)
-		while any (\x -> x != -1) parents 
-		do update_depths depths parents
-
-	in depths
-
-
--- | Computes sub-tree sizes in a 
--- depth-wise manner (from the
--- deepest nodes to root)
--- - naive version.
--- Work: O(d * n), Span: O(d * n) <d: depth>
-def subtree_sizes_naive [n] 
-		(parents: [n]i64)
-		(depts: [n]i64) =
-
-	-- max depth
-	let max_d = reduce i64.max 0 depts
-	let sizes = replicate n 1
-
-	-- iterates over all depths
-	let (_, sizes') = 
-		loop (d, sizes) = (max_d, sizes)
-		while d >= 1 do
-		
-			-- finds elements of 
-			-- current depth.
-			let flgs = 
-			map (\d_ -> 
-				if d_ == d then true
-				else false
-			) depts
-			
-			-- negates parent indicies
-			-- for parents with children
-			-- of different depths.
-			let ids =
-			map2 (\f p ->
-				if f then p else -1
-			) flgs parents
-			
-			-- accumulates current subtree sums to parents 
-			let prev = copy sizes
-			let sizes' = reduce_by_index sizes (+) 0 ids prev
-			in (d-1, sizes')
-
-	in map i64.i32 sizes'
-
-
--- | Computes sub-tree sizes through
--- Wyllie list-ranking - advanced version.
---  Work: O(n lg n), Span: O(n lg n) (worst case)
---  Work: O(n lg n), Span: O(lg n) (practice)
-def subtree_sizes_advanced [n] 
-		(parents: [n]i64) (_: [n]i64) =
-
-	let sizes = replicate n 1i64
-
-	let (sizes, _) = -- (Wyllie ranking)
-		loop (sizes, parents)
-		while any (\x -> x != -1) parents do
-
-			-- goes to parents
-			let parents' =
-					map (\p -> 
-						if p == -1 then -1
-						else parents[p]
-					) parents
-
-			-- accumulates size updates
-			let sizes' = reduce_by_index sizes 
-							(+) 0 parents (copy sizes)
-
-			in  (sizes', parents')
-
-	in sizes
-
-
+--------------------------------------------------
+----------- CONCEPTUAL IMPLEMENTATION ------------
+--------------------------------------------------
 
 -- | Converts from plain tree (with parent
 -- vector in Euler Tour form and root with
@@ -161,16 +52,38 @@ def subtree_sizes_advanced [n]
 -- ~ with 'subtree_sizes_advanced':
 -- Work: O(n lg n), Span: O(n lg n) (worst case)
 -- Work: O(n lg n), Span: O(lg n) (practice)
-def parents_to_vtree_naive [n] 
-		(find_subtree_sizes: [n]i64 -> [n]i64 -> [n]i64)
-		(parents: [n]i64) =
+def parents_to_vtree_naive [n] (parents: [n]i64) =
 
-	-- depth of current and previous nodes
-	let depths      = find_depths parents
-	let depths_prev = rotate (-1) depths
+	let sizes_ = replicate n 1i64
+	let depths_ = map (\p -> if p == -1 then 0 else 1) parents
+
+	let (sizes, depths, _) = -- (Wyllie ranking)
+		loop (sizes_, depths_, parents)
+		while any (\x -> x != -1) parents do
+
+			-- accumulates depth updates
+			let depths = 
+				map (\i -> 
+					if parents[i] == -1 then depths_[i] 
+					else depths_[i] + depths_[parents[i]]) 
+				(iota n)
+
+			-- accumulates size updates
+			let sizes = reduce_by_index sizes_ (+) 0 parents (copy sizes_)
+
+			-- updates parents
+			let parents' =
+				map (\p -> 
+					if p == -1 then -1
+					else parents[p]
+				) parents
+
+			in  (sizes, depths, parents')	
+
 
 	-- finds left-paren offsets through
 	-- depths differences.
+	let depths_prev = rotate (-1) depths
 	let left_offsets = 
 		map2 (\d_curr d_prev ->
 			if d_curr == 0 then 0
@@ -181,7 +94,6 @@ def parents_to_vtree_naive [n]
 
 	-- computes left-parens through right-
 	-- parens and subtree sizes.
-	let sizes = find_subtree_sizes parents depths
 	let right_paren = 
 		map2 (\left size ->
 			left + size * 2 - 1
@@ -191,10 +103,310 @@ def parents_to_vtree_naive [n]
 
 
 
---- TESTING ---
+-- | Filters and normalizes the pointers
+-- of an undirected 'vgraph' given an array
+-- of boolean predicates 'po_parents'.
+-- Work: O(n lg n), Span: O(lg n).
+def filter_parents [m] [n] (root: i64)
+				   (vgraph: ([m]i64, [n]i64, [m]f32))
+				   (po_parents: *[n]bool) =
+		
+	-- unpacks vgraph
+	let (segments, pointers, values) = vgraph
+
+	-- computes segment metadata (flags, indicies of segment start)
+	let (segs_start, segs_dist) = mkFlagArray (map u32.i64 segments) 0 (iota m) :> ([m]u32, [n]i64)
+	let flags = map bool.i64 segs_dist with [0] = true
+	let segs_start = map i64.u32 segs_start -- B1
+
+	-- computes pointer lookup arrays 
+	-- (current segment (II1), local index (II2), and size offsets).
+	let po_seg = sgmScan (+) 0 flags segs_dist -- II1 
+	let po_parents' = po_parents with [segs_start[root]] = true
+	let po_order = map2 (\i sgm -> i - segs_start[sgm]) (iota n) po_seg -- II2
+	let seg_offs = [1] ++ (init segments) |> scan (\s1 s2 -> s1 + s2 - 1) 0
+
+	-- adjusts pointers to reference the start of their segments
+	-- and filters subsequent parent pointers given 'po_parents'.
+	let pointers_norm = map (\p -> p - po_order[p]) pointers
+	let (parents_, _) = 
+		zip pointers_norm po_parents'
+		|> filter (\(_, ps) -> ps) 
+		|> unzip :> ([m]i64, [m]bool)
+
+	-- adjusts parent pointers to filtered indicies
+	-- by subtracting cumulative size offsets.
+	let parents = 
+		map (\i -> 
+			let seg = po_seg[parents_[i]]
+			in parents_[i] - seg_offs[seg]
+		) (iota m) with [root] = -1
+	
+	in (parents, values)
+
+
+
+-- | Converts from an undirected 'vgraph' tree to a parent vector
+-- tree given the 'root' index.
+-- Assumes an internally ordered vgraph, where the parent pointer
+-- is the first in its segment.
+-- Work: O(n lg n), Span: O(lg n).
+def undirected_vgraph_to_parents_inner [m] [n] (root: i64) 
+									   (vgraph: ([m]i64, [n]i64, [m]f32)) =
+
+	-- constructs parent pointers predicates 
+	-- (given by initial flags) before filtering. 
+	let (segments, _ , _) = vgraph 
+	let (_, flags) = mkFlagArray (map u32.i64 segments) false (replicate m true) :> ([]u32, [n]bool)
+	in filter_parents root vgraph flags
+
+
+
+-- | Converts from an undirected 'vgraph' tree to a parent vector
+-- tree given the 'root' index.
+-- Assumes an externally ordered vgraph, where all parent nodes
+-- precede their children in the array layout.
+-- Work: O(n lg n), Span: O(lg n).
+def undirected_vgraph_to_parents_outer [m] [n] (vgraph: ([m]i64, [n]i64, [m]f32)) =
+
+	let (segments, pointers , _) = vgraph 
+
+	-- computes start of current segment for each pointer
+	let (segs_start, segs_dist) = mkFlagArray (map u32.i64 segments) 0 (iota m) :> ([m]u32, [n]i64)
+	let flags = map bool.i64 segs_dist with [0] = true
+	let segs_start = map i64.u32 segs_start -- B1
+	let po_segstart = scatter (replicate n 0) segs_start segs_start |> sgmScan (+) 0 flags
+
+	-- constructs pointer predicates by
+	-- locating backwards pointers.
+	let po_parents =
+		zip pointers (iota n)
+		|> map (\(p, i) -> p < po_segstart[i] || i == 0)
+
+	in filter_parents 0 vgraph po_parents
+
+
+-- | Converts from an undirected 'vgraph' tree to a parent vector
+-- tree given the 'root' index.
+-- Makes no assumptions (but sacrifices speed).
+-- Work: O(n lg n + d * n), Span: O(lg n + d) <d: tree depth>.
+def undirected_vgraph_to_parents_full [m] [n] (root: i64)
+									  (vgraph: ([m]i64, [n]i64, [m]f32)) =
+	
+	let (segments, pointers, _) = vgraph
+
+	-- computes segment metadata (flags)
+	let (_, segs_dist) = mkFlagArray (map u32.i64 segments) 0 (iota m) :> ([m]u32, [n]i64)
+	let flags = map bool.i64 segs_dist with [0] = true
+
+	-- computes pointer lookup arrays 
+	-- (current, segment, active segment, next 
+	-- segments to activate, visited parents).
+	let po_seg = sgmScan (+) 0 flags segs_dist -- II1 
+	let po_active = map (\p -> p == root) po_seg
+	let po_next = map2 (\p a -> if a then p else -1) pointers po_active
+	let po_parents = replicate n false
+
+	-- traverses the tree to locate
+	-- parent pointers.
+	let (po_parents', _) =
+		loop (po_parents, po_next)
+		while any (\p -> p != -1) po_next do
+
+			-- marks found parents and child segments to be activated
+			let po_parents' = scatter po_parents po_next (replicate n true)
+			let seg_ids = map (\p -> if p == -1 then -1 else po_seg[p]) po_next
+			let segs_active = scatter (replicate m false) seg_ids (replicate n true)
+
+			-- finds parent pointers
+			-- for subsequent iteration.
+			let po_next' = 
+				map2 (\i ps -> 
+					if segs_active[po_seg[i]] && not ps
+					then pointers[i] 
+					else -1
+				) (iota n) po_parents'
+
+			in (po_parents', po_next')
+	
+	in filter_parents root vgraph po_parents'
+
+
+
+
+--------------------------------------------------
+------------- INLINED IMPLEMENTATION -------------
+--------------------------------------------------
+
+def undirected_vgraph_to_parents_inner' [m] [n] (root: i64) 
+									   (vgraph: ([m]i64, [n]i64, [m]f32)) =
+
+	let (segments, pointers, values) = vgraph 
+
+	let (segs_start, segs_dist) = mkFlagArray (map u32.i64 segments) 0 (iota m) :> ([m]u32, [n]i64)
+	let flags = map bool.i64 segs_dist with [0] = true
+	let segs_start = map i64.u32 segs_start
+
+	let po_seg = sgmScan (+) 0 flags segs_dist
+	let po_order = map2 (\i sgm -> i - segs_start[sgm]) (iota n) po_seg
+	let segment_offsets = [1] ++ (init segments) |> scan (\s1 s2 -> s1 + s2 - 1) 0
+
+	let pointers_norm = map (\p -> p - po_order[p]) pointers
+	let (pointer_ps, _) =
+		zip pointers_norm flags
+		|> filter (\(_, f) -> f)
+		|> unzip
+
+	let parents =
+		map (\i -> 
+			let segment = po_seg[pointer_ps[i]]
+			in if segment == i then -1
+		   else pointer_ps[i] - segment_offsets[segment]
+		) (indices pointer_ps) with [root] = -1
+	
+	in (parents, values)
+
+
+
+def undirected_vgraph_to_parents_outer' [m] [n] (vgraph: ([m]i64, [n]i64, [m]f32)) =
+
+	let (segments, pointers, values) = vgraph 
+
+	let (segs_start, segs_dist) = mkFlagArray (map u32.i64 segments) 0 (iota m) :> ([m]u32, [n]i64)
+	let flags = map bool.i64 segs_dist with [0] = true
+	let segs_start = map i64.u32 segs_start
+
+	let po_seg = sgmScan (+) 0 flags segs_dist
+	let po_segstart = scatter (replicate n 0) segs_start segs_start |> sgmScan (+) 0 flags
+	let po_order = map2 (\i sgm -> i - segs_start[sgm]) (iota n) po_seg
+	let segment_offsets = [1] ++ (init segments) |> scan (\s1 s2 -> s1 + s2 - 1) 0
+
+	let pointers_norm = map (\p -> p - po_order[p]) pointers
+	let (pointer_ps, _) =
+		zip pointers_norm (iota n)
+		|> filter (\(p, i) -> p < po_segstart[i] || i == 0)
+		|> unzip
+
+	let parents =
+		map (\i -> 
+			let segment = po_seg[pointer_ps[i]]
+			in if segment == i then -1
+		       else pointer_ps[i] - segment_offsets[segment]
+		) (indices pointer_ps) 
+		with [0] = -1
+	
+	in (parents, values)
+
+
+
+def undirected_vgraph_to_parents_full' [m] [n] (root: i64)
+									  (vgraph: ([m]i64, [n]i64, [m]f32)) =
+	
+	let (segments, pointers, values) = vgraph
+
+	let (segs_start, segs_dist) = mkFlagArray (map u32.i64 segments) 0 (iota m) :> ([m]u32, [n]i64)
+	let flags = map bool.i64 segs_dist with [0] = true
+	let segs_start = map i64.u32 segs_start
+
+	let po_seg = sgmScan (+) 0 flags segs_dist
+	let po_active = map (\p -> p == root) po_seg
+	let po_next = map2 (\p a -> if a then p else -1) pointers po_active
+	let po_parents = replicate n false
+
+	let (po_parents', _) =
+		loop (po_parents, po_next)
+		while any (\p -> p != -1) po_next do
+
+			let po_parents' = scatter po_parents po_next (replicate n true)
+			let seg_ids = map (\p -> if p == -1 then -1 else po_seg[p]) po_next
+			let segs_active = scatter (replicate m false) seg_ids (replicate n true)
+			let po_next' = map2 (\i ps -> if segs_active[po_seg[i]] && not ps then pointers[i] else -1) (iota n) po_parents'
+
+			in (po_parents', po_next')
+		
+	let po_parents'' = po_parents' with [segs_start[root]] = true
+	let po_order = map2 (\i sgm -> i - segs_start[sgm]) (iota n) po_seg
+	let seg_offs = [1] ++ (init segments) |> scan (\s1 s2 -> s1 + s2 - 1) 0
+
+	let pointers_norm = map (\p -> p - po_order[p]) pointers
+	let (parents_, _) = zip pointers_norm po_parents'' |> filter (\(_, ps) -> ps) |> unzip :> ([m]i64, [m]bool)
+
+	let parents = 
+		map (\i -> 
+			let seg = po_seg[parents_[i]]
+			in parents_[i] - seg_offs[seg]
+		) (iota m) with [root] = -1
+	
+	in (parents, values)
+
+
+
+def undirected_vgraph_to_vtree [m] [n] 't (constr: constraint)
+							   (parents_conv: [m]i64 -> ([]t, []t))
+							   (root: i64)
+							   (vgraph: ([m]i64, [n]i64, [m]f32)) =
+
+	let (parents, _) =
+		match constr
+			case #inner -> undirected_vgraph_to_parents_inner root vgraph
+			case #outer -> undirected_vgraph_to_parents_outer vgraph
+			case #full  -> undirected_vgraph_to_parents_full root vgraph
+	
+	in parents_conv (parents :> [m]i64)
+
+--- Example execution: 
+--	undirected_vgraph_to_vtree 
+--		#outer parents_to_vtree_naive 0i64
+--     	([2i64,4i64,1i64,1i64,1i64,1i64],
+--      [2i64,9i64, 0i64,6i64,7i64,8i64, 3i64, 4i64, 5i64, 1i64],
+--      (replicate 6 0))
+
+
+
+
+--------------------------------------------------
+-------------------- TESTING ---------------------
+--------------------------------------------------
+
+-- | Makes a full binary parent tree
+-- in Euler tour format.
+def make_binary_parents (len: i64) =
+	let tree = 
+		map (\i -> 
+			if i % 2 == 1 then (i-1) / 2
+			else i / 2
+		) (iota len)
+	
+	in tree with [0] = -1
+
+
+
+entry validate__parents_to_vgraph [n] (parents: [n]i64) =
+	let (left1, right1) = (parents_to_vtree parents)
+	let res1 = (map i64.i32 (left1 :> [n]i32),
+				map i64.i32 (right1 :> [n]i32))
+
+	let res2 = parents_to_vtree_naive parents
+	in res1 == res2
+
+-- ~~ DESCRIPTION:
+-- ~ Test of AS3 tree 1, 2, and 3.
+-- ~ Test of V-tree from Blelloch P. 85
+-- == 
+-- entry: validate__parents_to_vgraph
+-- compiled nobench input { [-1i64, 0i64, 1i64, 0i64] } 
+-- output { true }
+-- compiled nobench input { [-1i64, 0i64, 0i64, 0i64, 3i64, 3i64, 0i64, 6i64] }
+-- output { true }
+-- compiled nobench input { [-1i64, 0i64, 1i64, 2i64, 3i64] }
+-- output { true }
+-- compiled nobench input { [-1i64, 0i64, 1i64, 1i64, 1i64, 0i64] }
+-- output { true }
+
+
 
 entry test__parents_to_vtree_naive [n] (parents: [n]i64) =
-	parents_to_vtree_naive subtree_sizes_advanced parents
+	parents_to_vtree_naive parents
 
 -- ~~ DESCRIPTION:
 -- ~ Test of AS3 tree 1, 2, and 3.
@@ -214,147 +426,100 @@ entry test__parents_to_vtree_naive [n] (parents: [n]i64) =
 
 
 
---- EXPERIMENTS ---
+entry test__undirected_vgraph_to_parents_inner [m] [n] (root: i64) 
+											   (segments: [m]i64) 
+											   (pointers: [n]i64) =
 
--- Constrained conversion. Assumes a graph with no cycles, where root node has a self-pointer. 
--- If euler_tour == true: Assumes parent pointers are always the first pointer in each segment.
--- If euler_tour == false: Assumes that parent nodes always precede their children (e.g. Euler Tour).
-def undirected_vgraph_to_parents_constrained [m] [n] (euler_tour: bool) 
-											 (vgraph: ([m]i64, [n]i64, [n]f32)) =
-	let (segments, pointers, _) = vgraph 
+	let values = replicate m 0
+	let vgraph = (segments, pointers, values)
+	let (parents, _) =
+		undirected_vgraph_to_parents_inner' root vgraph
 
-	let (segs_start, segs_dist) = mkFlagArray (map u32.i64 segments) 0 (iota m) :> ([m]u32, [n]i64)
-	let flags = map bool.i64 segs_dist with [0] = true
-	let segs_start = map i64.u32 segs_start -- B1 array
+	in parents
 
-	let po_seg = sgmScan (+) 0 flags segs_dist -- II1
-	let po_segstart = scatter (replicate n 0) segs_start segs_start |> sgmScan (+) 0 flags
-	let po_order = sgmScan (+) 0 flags (replicate n 1) |> map (\i -> i-1) -- II2 <better method in slides>
-	let segment_offsets = [1] ++ (init segments) |> scan (\s1 s2 -> s1 + s2 - 1) 0
-
-	let pointers_norm = map (\p -> p - po_order[p]) pointers
-	let po_flgs_ids = zip3 pointers_norm flags (iota n)
-
-	let (pointer_ps, _, _) =
-		if euler_tour
-		then 
-			filter (\(p, _, i) -> p <= po_segstart[i])
-				po_flgs_ids :> [m](i64, bool, i64)
-		else 
-			filter (\(_, f, _) -> f)
-				po_flgs_ids :> [m](i64, bool, i64)
-		|> unzip3
-
-	in map (\i -> 
-		let segment = po_seg[pointer_ps[i]]
-		in if segment == i then -1
-		   else pointer_ps[i] - segment_offsets[segment]
-	) (indices pointer_ps)
+-- ~~ DESCRIPTION:
+-- ~ Test of AS3 tree 1, 2, and 3 ('inner' constrained).
+-- ~ Test of V-tree from Blelloch P. 85
+-- ==
+-- entry: test__undirected_vgraph_to_parents_inner
+-- compiled nobench input { 3i64 [1i64,1i64,2i64,2i64] [4i64, 3i64, 5i64,1i64, 0i64,2i64] }
+-- output { [3i64,2i64,3i64,-1i64] }
+-- compiled nobench input { 7i64 [1i64,1i64,3i64,1i64,1i64,2i64,1i64,4i64] [10i64, 11i64, 12i64,5i64,6i64, 3i64, 4i64, 13i64,9i64, 8i64, 0i64,1i64,2i64,7i64] }
+-- output { [7i64,7i64,7i64,2i64,2i64,7i64,5i64,-1i64] }
+-- compiled nobench input { 2i64 [2i64,2i64,1i64,2i64,1i64] [4i64,2i64, 1i64,5i64, 0i64, 3i64,7i64, 6i64] }
+-- output { [2i64,0i64,-1i64,1i64,3i64] }
+-- compiled nobench input { 5i64 [1i64,4i64,1i64,1i64,1i64,2i64] [8i64, 9i64,5i64,6i64,7i64, 2i64, 3i64, 4i64, 0i64,1i64] }
+-- output { [5i64,5i64,1i64,1i64,1i64,-1i64] }
 
 
 
--- Unconstrained conversion. Assumes a fully connected graph with no cycles. 
--- 'root' given as index of root node in 'segments' array.
-def undirected_vgraph_to_parents_full [m] [n] (root: i64)
-									  (vgraph: ([m]i64, [n]i64, [m]f32)) =
-	
-	let (segments, pointers, _) = vgraph
+entry test__undirected_vgraph_to_parents_outer [m] [n]
+											   (segments: [m]i64) 
+											   (pointers: [n]i64) =
 
-	let (segs_start, segs_dist) = mkFlagArray (map u32.i64 segments) 0 (iota m) :> ([m]u32, [n]i64)
-	let flags = map bool.i64 segs_dist with [0] = true
-	let segs_start = map i64.u32 segs_start -- B1 array
+	let values = replicate m 0
+	let vgraph = (segments, pointers, values)
+	let (parents, _) =
+		undirected_vgraph_to_parents_outer' vgraph
 
-	let po_seg = sgmScan (+) 0 flags segs_dist -- II1 
-	let po_active = map (\p -> p == root) po_seg
-	let po_ids = map2 (\p a -> if a then p else -1) pointers po_active
-	let po_parents = replicate n false
+	in parents
 
-	let (po_parents', _) =
-		loop (po_parents, po_ids)
-		while any (\p -> p != -1) po_ids do
-
-			let po_parents' = scatter po_parents po_ids (replicate n true)
-			let seg_ids = map (\p -> if p == -1 then -1 else po_seg[p]) po_ids
-			let segs_active = scatter (replicate m false) seg_ids (replicate n true)
-			let po_ids' = map2 (\i ps -> if segs_active[po_seg[i]] && not ps then pointers[i] else -1) (iota n) po_parents'
-
-			in (po_parents', po_ids')
-		
-	let po_parents'' = po_parents' with [segs_start[root]] = true
-	let po_order = sgmScan (+) 0 flags (replicate n 1) |> map (\i -> i-1) -- II2 <better method in slides>
-	let seg_offs = [1] ++ (init segments) |> scan (\s1 s2 -> s1 + s2 - 1) 0
-
-	let pointers_norm = map (\p -> p - po_order[p]) pointers
-	let (parents_, _) = zip pointers_norm po_parents'' |> filter (\(_, ps) -> ps) |> unzip :> ([m]i64, [m]bool)
-
-	in map (\i -> 
-		let seg = po_seg[parents_[i]]
-		in parents_[i] - seg_offs[seg]
-	) (iota m) with [root] = -1
-
-	-- test (binary tree of depth 2):   undirected_vgraph_to_parents_full 3 ([1,1,3,2,3,1,1], [2, 3, 0,1,5, 4,7, 6,10,11, 8, 9], (replicate 7 0))
-	-- test (minimal tree):             undirected_vgraph_to_parents_full 1 ([1,2,1], [1,0,3,2], (replicate 3 0))
+-- ~~ DESCRIPTION:
+-- ~ Test of AS3 tree 1, 2, and 3 ('outer' constrained).
+-- ~ Test of V-tree from Blelloch P. 85
+-- ==
+-- entry: test__undirected_vgraph_to_parents_outer
+-- compiled nobench input { [2i64,2i64,1i64,1i64] [2i64,5i64, 0i64,4i64, 3i64, 1i64] }
+-- output { [-1i64,0i64,1i64,0i64] }
+-- compiled nobench input { [4i64,1i64,1i64,3i64,1i64,1i64,2i64,1i64] [5i64,4i64,11i64,8i64, 1i64, 0i64, 9i64,10i64,3i64, 6i64, 7i64, 2i64,13i64,12i64] }
+-- output { [-1i64,0i64,0i64,0i64,3i64,3i64,0i64,6i64] }
+-- compiled nobench input { [1i64,2i64,2i64,2i64,1i64] [1i64, 0i64,4i64, 5i64,2i64, 3i64,7i64, 6i64] }
+-- output { [-1i64,0i64,1i64,2i64,3i64] }
+-- compiled nobench input { [2i64,4i64,1i64,1i64,1i64,1i64] [2i64,9i64, 0i64,6i64,7i64,8i64, 3i64, 4i64, 5i64, 1i64] }
+-- output { [-1i64,0i64,1i64,1i64,1i64,0i64] }
 
 
 
+entry test__undirected_vgraph_to_parents_full [m] [n] (root: i64) 
+											  (segments: [m]i64) 
+											  (pointers: [n]i64) =
 
+	let values = replicate m 0
+	let vgraph = (segments, pointers, values)
+	let (parents, _) =
+		undirected_vgraph_to_parents_full' root vgraph
 
+	in parents
 
-
---- OLD
-
--- -- | depth helper function. 
--- -- Accumulates depth updates.
--- -- Work: O(n), Span: O(1)
--- def step [n] (R: [n]i64) (parents: [n]i64) 
--- 			 (completed: [n]bool) 
--- 			 : ([n]i64, [n]i64) =
-
--- 	-- if completed or root: Do nothing.
--- 	-- else: Add previous depth.
--- 	let f i = if completed[i] || parents[i] == n
--- 			  then (R[i], parents[i])
--- 			  else (R[i] + R[parents[i]], 
--- 			  		parents[parents[i]])
-
--- 	in unzip (tabulate n f)
-
-
--- -- | Computes the depth vector of a plain tree 
--- -- (given its parent vector) through Wyllie-like
--- -- list-ranking.
--- -- Work: O(n lg n), Span: O(lg n)
--- def depth [n] (parents: [n]i64) : [n]i64 =
--- 	let R = replicate n 1 with [0] = 0
--- 		 -- ^^ initial depth (with root of 0)
-
--- 	-- completion status
--- 	-- of ranked sublist.
--- 	let completed =
--- 		map (\s ->
--- 			if s == 0 then true
--- 			else false
--- 		) parents
-
--- 	let (R, _, _) = -- (Wyllie list-ranking)
--- 		loop (R, parents, completed)
--- 		while not (reduce (&&) true completed)
--- 		do -- ^^ some sub-lists not completed
-
--- 			-- performs step and
--- 			-- evals sub-list completion
--- 			let (R', parents') = step R parents completed
--- 			let completed =
--- 				map (\p ->
--- 					if p == 0 then true
--- 					else false
--- 				) parents'
-
--- 			in  (R', parents', completed)
-
--- 	in R
-
-
-
-	-- in zip parents' (indices parents')
-	--    |> map (\(p, i) -> if II1[p] == i then -1 else p - parent_offsets[II1[p]])
+-- ~~ DESCRIPTION:
+-- ~ Test of AS3 tree 1, 2, and 3 (inner and outer tests).
+-- ~ Test of V-tree from Blelloch P. 85
+-- ~ Test of minimal vtree and binary tree of depth 2 with different roots.
+-- ==
+-- entry: test__undirected_vgraph_to_parents_full
+-- compiled nobench input { 3i64 [1i64,1i64,2i64,2i64] [4i64, 3i64, 5i64,1i64, 0i64,2i64] }
+-- output { [3i64,2i64,3i64,-1i64] }
+-- compiled nobench input { 0i64 [2i64,2i64,1i64,1i64] [2i64,5i64, 0i64,4i64, 3i64, 1i64] }
+-- output { [-1i64,0i64,1i64,0i64] }
+-- compiled nobench input { 7i64 [1i64,1i64,3i64,1i64,1i64,2i64,1i64,4i64] [10i64, 11i64, 12i64,5i64,6i64, 3i64, 4i64, 13i64,9i64, 8i64, 0i64,1i64,2i64,7i64] }
+-- output { [7i64,7i64,7i64,2i64,2i64,7i64,5i64,-1i64] }
+-- compiled nobench input { 0i64 [4i64,1i64,1i64,3i64,1i64,1i64,2i64,1i64] [5i64,4i64,11i64,8i64, 1i64, 0i64, 9i64,10i64,3i64, 6i64, 7i64, 2i64,13i64,12i64] }
+-- output { [-1i64,0i64,0i64,0i64,3i64,3i64,0i64,6i64] }
+-- compiled nobench input { 2i64 [2i64,2i64,1i64,2i64,1i64] [4i64,2i64, 1i64,5i64, 0i64, 3i64,7i64, 6i64] }
+-- output { [2i64,0i64,-1i64,1i64,3i64] }
+-- compiled nobench input { 0i64 [1i64,2i64,2i64,2i64,1i64] [1i64, 0i64,4i64, 5i64,2i64, 3i64,7i64, 6i64] }
+-- output { [-1i64,0i64,1i64,2i64,3i64] }
+-- compiled nobench input { 5i64 [1i64,4i64,1i64,1i64,1i64,2i64] [8i64, 9i64,5i64,6i64,7i64, 2i64, 3i64, 4i64, 0i64,1i64] }
+-- output { [5i64,5i64,1i64,1i64,1i64,-1i64] }
+-- compiled nobench input { 0i64 [2i64,4i64,1i64,1i64,1i64,1i64] [2i64,9i64, 0i64,6i64,7i64,8i64, 3i64, 4i64, 5i64, 1i64] }
+-- output { [-1i64,0i64,1i64,1i64,1i64,0i64] }
+-- compiled nobench input { 1i64 [1i64,2i64,1i64] [1i64, 0i64,3i64, 2i64] }
+-- output { [1i64,-1i64,1i64] }
+-- compiled nobench input { 0i64 [1i64,2i64,1i64] [1i64, 0i64,3i64, 2i64] }
+-- output { [-1i64,0i64,1i64] }
+-- compiled nobench input { 2i64 [1i64,2i64,1i64] [1i64, 0i64,3i64, 2i64] }
+-- output { [1i64,2i64,-1i64] }
+-- compiled nobench input { 3i64 [1i64,1i64,3i64,2i64,3i64,1i64,1i64] [2i64, 3i64, 0i64,1i64,5i64, 4i64,7i64, 6i64,10i64,11i64, 8i64, 9i64] }
+-- output { [2i64,2i64,3i64,-1i64,3i64,4i64,4i64] }
+-- compiled nobench input { 0i64 [1i64,1i64,3i64,2i64,3i64,1i64,1i64] [2i64, 3i64, 0i64,1i64,5i64, 4i64,7i64, 6i64,10i64,11i64, 8i64, 9i64] }
+-- output { [-1i64,2i64,0i64,2i64,3i64,4i64,4i64] }
