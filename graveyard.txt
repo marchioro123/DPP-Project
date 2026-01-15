@@ -286,3 +286,38 @@
 -- 		) (indices pointer_ps) with [root] = -1
 	
 -- 	in (parents, values)
+
+
+
+
+
+	echo 10 | ./tests -e make_horizontal_parents > data/phori_10.in
+	echo 1000 | ./tests -e make_horizontal_parents > data/phori_1000.in
+	echo 10000 | ./tests -e make_horizontal_parents > data/phori_10000.in
+	echo 100000 | ./tests -e make_horizontal_parents > data/phori_100000.in
+	echo 1000000 | ./tests -e make_horizontal_parents > data/phori_1000000.in
+	echo 10000000 | ./tests -e make_horizontal_parents > data/phori_10000000.in
+
+
+
+entry validate__parents_to_vgraph [n] (parents: [n]i64) =
+	let (left1, right1) = (parents_to_vtree_improved parents)
+	let res1 = (map i64.i32 (left1 :> [n]i32),
+				map i64.i32 (right1 :> [n]i32))
+
+	let res2 = parents_to_vtree_naive parents
+	in res1 == res2
+
+-- ~~ DESCRIPTION:
+-- ~ Test of AS3 tree 1, 2, and 3.
+-- ~ Test of V-tree from Blelloch P. 85
+-- == 
+-- entry: validate__parents_to_vgraph
+-- compiled nobench input { [-1i64, 0i64, 1i64, 0i64] } 
+-- output { true }
+-- compiled nobench input { [-1i64, 0i64, 0i64, 0i64, 3i64, 3i64, 0i64, 6i64] }
+-- output { true }
+-- compiled nobench input { [-1i64, 0i64, 1i64, 2i64, 3i64] }
+-- output { true }
+-- compiled nobench input { [-1i64, 0i64, 1i64, 1i64, 1i64, 0i64] }
+-- output { true }

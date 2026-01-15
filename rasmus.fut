@@ -13,6 +13,10 @@
 --   Assumes Euler tour of tree (like some other general operations). Need for slow computatipn of subtree sizes.
 --   Simple and efficient if tree given in Euler tour and subtree sizes already known.
 
+-- ~ Constrained (inner or outer) undirected graphs makes for for simple an faster conversions.
+
+-- ~ Inlined versions provided to reuse pre-computed arrays for efficiency.
+
 -- ~ Validates:
 --   Implementation validate on all three parent trees of AS3 and the example tree of
 --   from Blelloch P. 85.
@@ -23,9 +27,6 @@
 -- ~ Benchamrk compare Rasmus' and Martins' conversions on different backends and compared to each other.
 -- ~ Benchmark differences between directed vs. undirected vgraph conversions <hard to random generate large trees>.
 
--- ~ Perform convertions BACK from vtree to parents or to vgraphs
--- ~ Perform advanced (unconstrained) conversion from undirected vgraph to parents.
--- ~ Implement the splitting and merging vtree operations.
 
 
 
@@ -41,18 +42,11 @@ type constraint = #inner | #outer | #full
 ----------- CONCEPTUAL IMPLEMENTATION ------------
 --------------------------------------------------
 
--- | Converts from plain tree (with parent
--- vector in Euler Tour form and root with
--- parent 0) to vtree.
---
--- ~~ Complexity <n: nodes, d: depth>
--- ~ general:
--- Work: O(n lg n  +  W(find_subtree_sizes)),
--- Span: O(lg n  +    S(find_subtree_sizes))
--- ~ with 'subtree_sizes_advanced':
--- Work: O(n lg n), Span: O(n lg n) (worst case)
--- Work: O(n lg n), Span: O(lg n) (practice)
-def parents_to_vtree_naive [n] (parents: [n]i64) =
+-- | Computes the depths and subtree sizes of a
+-- parent tree using Wyllie list ranking.
+-- Work: O(n * lg n), Span: O(n * lg n) (worst case)
+-- Work: O(n * lg n), Span: O(lg n) (practice)
+def wyllie_ds [n] (parents: [n]i64) =
 
 	let sizes_ = replicate n 1i64
 	let depths_ = map (\p -> if p == -1 then 0 else 1) parents
@@ -66,7 +60,7 @@ def parents_to_vtree_naive [n] (parents: [n]i64) =
 				map (\i -> 
 					if parents[i] == -1 then depths_[i] 
 					else depths_[i] + depths_[parents[i]]) 
-				(iota n)
+				(iota n) :> [n]i64
 
 			-- accumulates size updates
 			let sizes = reduce_by_index sizes_ (+) 0 parents (copy sizes_)
@@ -78,12 +72,25 @@ def parents_to_vtree_naive [n] (parents: [n]i64) =
 					else parents[p]
 				) parents
 
-			in  (sizes, depths, parents')	
+			in  (sizes, depths, parents')
+	
+	in (depths, sizes) 
 
+
+
+-- | Converts from plain tree (with parent
+-- vector in Euler Tour form and root with
+-- parent 0) to vtree.
+-- Work: O(n * lg n), Span: O(n * lg n) (worst case)
+-- Work: O(n * lg n), Span: O(lg n) (practice)
+def parents_to_vtree_naive [n] (parents: [n]i64) =
+
+	-- depth of current and previous nodes
+	let (depths, sizes) = wyllie_ds parents
+	let depths_prev = rotate (-1) depths
 
 	-- finds left-paren offsets through
 	-- depths differences.
-	let depths_prev = rotate (-1) depths
 	let left_offsets = 
 		map2 (\d_curr d_prev ->
 			if d_curr == 0 then 0
@@ -106,7 +113,7 @@ def parents_to_vtree_naive [n] (parents: [n]i64) =
 -- | Filters and normalizes the pointers
 -- of an undirected 'vgraph' given an array
 -- of boolean predicates 'po_parents'.
--- Work: O(n lg n), Span: O(lg n).
+-- Work: O(n), Span: O(lg n).
 def filter_parents [m] [n] (root: i64)
 				   (vgraph: ([m]i64, [n]i64, [m]f32))
 				   (po_parents: *[n]bool) =
@@ -150,7 +157,7 @@ def filter_parents [m] [n] (root: i64)
 -- tree given the 'root' index.
 -- Assumes an internally ordered vgraph, where the parent pointer
 -- is the first in its segment.
--- Work: O(n lg n), Span: O(lg n).
+-- Work: O(n), Span: O(lg n).
 def undirected_vgraph_to_parents_inner [m] [n] (root: i64) 
 									   (vgraph: ([m]i64, [n]i64, [m]f32)) =
 
@@ -166,7 +173,7 @@ def undirected_vgraph_to_parents_inner [m] [n] (root: i64)
 -- tree given the 'root' index.
 -- Assumes an externally ordered vgraph, where all parent nodes
 -- precede their children in the array layout.
--- Work: O(n lg n), Span: O(lg n).
+-- Work: O(n), Span: O(lg n).
 def undirected_vgraph_to_parents_outer [m] [n] (vgraph: ([m]i64, [n]i64, [m]f32)) =
 
 	let (segments, pointers , _) = vgraph 
@@ -186,10 +193,11 @@ def undirected_vgraph_to_parents_outer [m] [n] (vgraph: ([m]i64, [n]i64, [m]f32)
 	in filter_parents 0 vgraph po_parents
 
 
+
 -- | Converts from an undirected 'vgraph' tree to a parent vector
 -- tree given the 'root' index.
 -- Makes no assumptions (but sacrifices speed).
--- Work: O(n lg n + d * n), Span: O(lg n + d) <d: tree depth>.
+-- Work: O(d * n), Span: O(d * lg n) <d: tree depth>.
 def undirected_vgraph_to_parents_full [m] [n] (root: i64)
 									  (vgraph: ([m]i64, [n]i64, [m]f32)) =
 	
@@ -237,6 +245,49 @@ def undirected_vgraph_to_parents_full [m] [n] (root: i64)
 --------------------------------------------------
 ------------- INLINED IMPLEMENTATION -------------
 --------------------------------------------------
+
+def parents_to_vtree_naive' [n] (parents: [n]i64) =
+
+	let sizes_ = replicate n 1i64
+	let depths_ = map (\p -> if p == -1 then 0 else 1) parents
+
+	let (sizes, depths, _) =
+		loop (sizes_, depths_, parents)
+		while any (\x -> x != -1) parents do
+
+			let depths = 
+				map (\i -> 
+					if parents[i] == -1 then depths_[i] 
+					else depths_[i] + depths_[parents[i]]) 
+				(iota n)
+
+			let sizes = reduce_by_index sizes_ (+) 0 parents (copy sizes_)
+
+			let parents' =
+				map (\p -> 
+					if p == -1 then -1
+					else parents[p]
+				) parents
+
+			in  (sizes, depths, parents')	
+
+	let depths_prev = rotate (-1) depths
+	let left_offsets = 
+		map2 (\d_curr d_prev ->
+			if d_curr == 0 then 0
+			else d_prev - d_curr + 2
+		) depths depths_prev
+	
+	let left_paren = scan (+) 0 left_offsets 
+
+	let right_paren = 
+		map2 (\left size ->
+			left + size * 2 - 1
+		) left_paren sizes
+	
+	in (left_paren, right_paren)
+
+
 
 def undirected_vgraph_to_parents_inner' [m] [n] (root: i64) 
 									   (vgraph: ([m]i64, [n]i64, [m]f32)) =
@@ -367,19 +418,6 @@ def undirected_vgraph_to_vtree [m] [n] 't (constr: constraint)
 --------------------------------------------------
 -------------------- TESTING ---------------------
 --------------------------------------------------
-
--- | Makes a full binary parent tree
--- in Euler tour format.
-def make_binary_parents (len: i64) =
-	let tree = 
-		map (\i -> 
-			if i % 2 == 1 then (i-1) / 2
-			else i / 2
-		) (iota len)
-	
-	in tree with [0] = -1
-
-
 
 entry validate__parents_to_vgraph [n] (parents: [n]i64) =
 	let (left1, right1) = (parents_to_vtree parents)
@@ -523,3 +561,26 @@ entry test__undirected_vgraph_to_parents_full [m] [n] (root: i64)
 -- output { [2i64,2i64,3i64,-1i64,3i64,4i64,4i64] }
 -- compiled nobench input { 0i64 [1i64,1i64,3i64,2i64,3i64,1i64,1i64] [2i64, 3i64, 0i64,1i64,5i64, 4i64,7i64, 6i64,10i64,11i64, 8i64, 9i64] }
 -- output { [-1i64,2i64,0i64,2i64,3i64,4i64,4i64] }
+
+
+
+
+--------------------------------------------------
+------------------- BENCHING ---------------------
+--------------------------------------------------
+
+-- | Makes a full binary parent tree
+-- in Euler tour format.
+entry make_binary_parents (len: i64) =
+	let tree = 
+		map (\i -> 
+			if i % 2 == 1 then (i-1) / 2
+			else i / 2
+		) (iota (len-1))
+	
+	in [-1] ++ tree
+
+-- ==
+-- entry: test__parents_to_vtree_naive
+-- compiled notest input @ data/binary_8.in
+
