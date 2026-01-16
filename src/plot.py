@@ -9,19 +9,20 @@ import json
 import sys
 
 
-
+# proceses input arguments
 in_size = len(sys.argv)
 data_sizes = list(map(int, sys.argv[-6:]))
 title = sys.argv[1]
 fig, ax = plt.subplots()
 
-form = ['-', '-.', '--', ':']
+# initializes output data/formats
+form = ['-', '-.', ':', '--']
 col = ['r', 'g', 'b', 'k']
 plots = []
 labels = []
 
 
-
+# ranges over backend batch
 for i in range(2, in_size-6):
 
 	arg = sys.argv[i]
@@ -32,6 +33,7 @@ for i in range(2, in_size-6):
 	benchmarks = arg_lst[2].split(',')
 
 
+	# ranges over specific tests
 	for j in range (0, len(benchmarks)):
 		
 		benchmark = benchmarks[j]
@@ -43,12 +45,12 @@ for i in range(2, in_size-6):
 
 		measurements = json_['{}.fut:{}'.format(progname,benchmark)]['datasets']
 		runtimes = list([ np.mean(measurements['data/ps_' + tree + '_{}.in'.format(n)]['runtimes']) / 1000 for n in data_sizes ])
-		runtime_plot = ax.plot(data_sizes, runtimes, col[i-2] + form[j], label=(backend + ' ' + tree + ' runtime'))
+		runtime_plot = ax.plot(data_sizes, runtimes, col[i-2] + form[j], label=(version + ' ' + backend + ' ' + tree + ' runtime'), linewidth=2)
 
 		plots += runtime_plot
 
 
-
+# constructs benchmark figure
 labels += [p.get_label() for p in plots]
 ax.set_title(title)
 ax.set_xlabel('Input size')
@@ -56,7 +58,7 @@ ax.set_ylabel('Runtime (ms)', color='k')
 ax.tick_params('y', colors='k')
 plt.xticks(data_sizes, rotation='vertical')
 
-ax.legend(plots, labels, loc=0, fontsize = "small")
+ax.legend(plots, labels, loc=0, fontsize = "medium")
 ax.semilogx()
 fig.tight_layout()
 

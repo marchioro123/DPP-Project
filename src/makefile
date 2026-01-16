@@ -1,43 +1,73 @@
 
-.PHONY: clean benchmark test
+.PHONY: clean benchmark test plot all
 
 
-
-all: test plot benchmark
+# General commands
+all: test benchmark plot
 
 clean:
 	rm -fr data lib futhark.pkg *.actual *.expected \
 	tests helpers *.c *.json *.pdf
 
 
-
+# Analysis
 test: lib tests.fut
+	printf "\n\n--------------------------------------------\n\
+----------- TESTING SEQUENTIAL -------------\n\
+--------------------------------------------\n\n"
 	futhark test --backend=c tests.fut
+	printf "\n\n--------------------------------------------\n\
+----------- TESTING PARALLEL ---------------\n\
+--------------------------------------------\n\n"
 	futhark test --backend=cuda tests.fut
 
 benchmark: data
-	futhark bench --backend=c tests.fut
-	futhark bench --backend=cuda tests.fut
-	futhark bench --backend=opencl tests.fut
+	printf "\n\n--------------------------------------------\n\
+----------- BENCHMARKS C BACKEND -----------\n\
+--------------------------------------------\n\n"
+	futhark bench --backend=c --json tests-c.json tests.fut
+	printf "\n\n--------------------------------------------\n\
+----------- BENCHMARKS CUDA BACKEND --------\n\
+--------------------------------------------\n\n"
+	futhark bench --backend=cuda --json tests-cuda.json tests.fut
+	printf "\n\n--------------------------------------------\n\
+----------- BENCHMARKS OPENCL BACKEND ------\n\
+--------------------------------------------\n\n"
+	futhark bench --backend=opencl --json tests-opencl.json tests.fut
 
 
+# Benchmark plotting
+plot: conv_naive.pdf conv_improved.pdf conv_comparison.pdf \
+	  naive_parallel.pdf improved_parallel.pdf
 
-plot: plot_naive.pdf plot_improved.pdf
+conv_comparison.pdf: plot.py tests-c.json tests-cuda.json
+	python3 plot.py conv_comparison tests:cuda:flat_naive,chain_naive,binary_naive \
+							   	    tests:cuda:flat_improved,chain_improved,binary_improved \
+							   		$(SIZES)
 
-plot_naive.pdf: plot_backends.py tests-c.json tests-cuda.json tests-opencl.json
-	python3 plot_backends.py conv_naive tests:c:flat_naive,chain_naive,binary_naive \
-										tests:cuda:flat_naive,chain_naive,binary_naive \
-							 			tests:opencl:flat_naive,chain_naive,binary_naive \
-							 			$(SIZES)
+conv_naive.pdf: plot.py tests-c.json tests-cuda.json
+	python3 plot.py conv_naive tests:c:flat_naive,chain_naive,binary_naive \
+							   tests:cuda:flat_naive,chain_naive,binary_naive \
+							   $(SIZES)
 
-plot_improved.pdf: plot_backends.py tests-c.json tests-cuda.json tests-opencl.json
-	python3 plot_backends.py conv_improved parents_naive tests:c:flat_improved,chain_improved,binary_improved,random_improved \
-							 			   tests:cuda:flat_improved,chain_improved,binary_improved,random_improved \
-							 			   tests:opencl:flat_improved,chain_improved,binary_improved,random_improved \
-							 			   $(SIZES)
+conv_improved.pdf: plot.py tests-c.json tests-cuda.json
+	python3 plot.py conv_improved tests:c:flat_improved,chain_improved,binary_improved,random_improved \
+							 	  tests:cuda:flat_improved,chain_improved,binary_improved,random_improved \
+							 	  $(SIZES)
 
 
+naive_parallel.pdf: plot.py tests-c.json tests-cuda.json tests-opencl.json
+	python3 plot.py naive_parallel tests:cuda:flat_naive,chain_naive,binary_naive \
+							       tests:opencl:flat_naive,chain_naive,binary_naive \
+							       $(SIZES)
 
+improved_parallel.pdf: plot.py tests-c.json tests-cuda.json tests-opencl.json
+	python3 plot.py improved_parallel tests:cuda:flat_improved,chain_improved,binary_improved,random_improved \
+							 	      tests:opencl:flat_improved,chain_improved,binary_improved,random_improved \
+							 	      $(SIZES)
+
+
+# Data generation
 data: data/.generated
 
 data/.generated: helpers
@@ -51,7 +81,7 @@ data/.generated: helpers
 	touch $@
 
 
-
+# Benchmark .json compilation
 tests-c.json: data tests.fut parents_conv.fut directed_conv.fut undirected_conv.fut
 	futhark bench --backend=c --json tests-c.json tests.fut
 
@@ -62,7 +92,7 @@ tests-opencl.json: data tests.fut parents_conv.fut directed_conv.fut undirected_
 	futhark bench --backend=opencl --json tests-opencl.json tests.fut
 
 
-
+# Library/utility compilation
 helpers: lib helpers.fut
 	futhark c helpers.fut
 

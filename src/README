@@ -1,0 +1,35 @@
+
+--- Project
+The projects attempts efficient parallel implementations of v-graph,
+parent vector, and v-tree conversions (as described by Blellochs PHD and
+the KU DPP lectures). Created in Futhark by Martin Bom Marchioro and
+Rasmus Ross Nylandsted.
+
+
+--- Layout
+- parents_conv.fut:    Contains parents to v-tree conversion functions.
+- directed_conv.fut:   Contains directed v-graph to parents conversion functions.
+- undirected_conv.fut: Contains undirected v-graph to parents conversion functions.
+- helpers.fut:         Contains parallel utility and data-generation functions.
+- plot.py:             A script for plotting benchmark .json data.
+
+
+--- Dependencies
+- A machine capable of C, Cuda, and OpenCL execution.
+
+- The Futhark compiler (for main execution)
+  * lib/github.com/diku-dk/sorts/radix_sort library
+  * lib/github.com/diku-dk/cpprandom/random library 
+
+- A Python3 interpreter (for benchmark plotting)
+  * sys library
+  * numpy library
+  * matplotlib library
+  * json library
+
+
+--- Execution
+- Testing:      $ make test
+- Benchmarking: $ make benchmark
+- Plotting:     $ make plot
+- Cleaning:     $ make clean
