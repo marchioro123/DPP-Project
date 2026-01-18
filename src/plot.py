@@ -52,13 +52,13 @@ for i in range(2, in_size-6):
 
 # constructs benchmark figure
 labels += [p.get_label() for p in plots]
-ax.set_title(title)
-ax.set_xlabel('Input size')
-ax.set_ylabel('Runtime (ms)', color='k')
+ax.set_title(title, fontsize=18)
+ax.set_xlabel('Input size', fontsize=13)
+ax.set_ylabel('Runtime (ms)', color='k', fontsize=13)
 ax.tick_params('y', colors='k')
 plt.xticks(data_sizes, rotation='vertical')
 
-ax.legend(plots, labels, loc=0, fontsize = "medium")
+ax.legend(plots, labels, loc=0, fontsize = "large")
 ax.semilogx()
 fig.tight_layout()
 

@@ -10,8 +10,8 @@ import "lib/github.com/diku-dk/sorts/radix_sort"
 
 -- | Computes the depths and subtree sizes of a
 -- parent tree using Wyllie list ranking.
--- Work: O(n * lg n), Span: O(n * lg n) (worst case)
--- Work: O(n * lg n), Span: O(lg n) (practice)
+-- Work: O(n * lg d), Span: O(n * lg d) (worst case)
+-- Work: O(n * lg d), Span: O(lg n * lg d) (practice)
 def wyllie_ds [n] (parents: [n]i64) =
 
 	let sizes_ = replicate n 1i64
@@ -40,15 +40,15 @@ def wyllie_ds [n] (parents: [n]i64) =
 
 			in  (sizes, depths, parents')
 	
-	in (depths, sizes) 
+	in (depths, sizes)
 
 
 -- | Converts from plain tree (with parent
 -- vector in Euler Tour form and root with
 -- parent 0) to vtree.
--- Work: O(n * lg n), Span: O(n * lg n) (worst case)
--- Work: O(n * lg n), Span: O(lg n) (practice)
-def parents_to_vtree_naive [n] (parents: [n]i64) =
+-- Work: O(n * lg d), Span: O(n * lg d) (worst case)
+-- Work: O(n * lg d), Span: O(lg n * lg d) (practice)
+def parents_to_vtree_constrained [n] (parents: [n]i64) =
 
 	-- depth of current and previous nodes
 	let (depths, sizes) = wyllie_ds parents
@@ -62,7 +62,7 @@ def parents_to_vtree_naive [n] (parents: [n]i64) =
 			else d_prev - d_curr + 2
 		) depths depths_prev
 	
-	let left_paren = scan (+) 0 left_offsets 
+	let left_paren = scan (+) 0 left_offsets
 
 	-- computes left-parens through right-
 	-- parens and subtree sizes.
@@ -79,7 +79,7 @@ def parents_to_vtree_naive [n] (parents: [n]i64) =
 -------------- ADVANCED CONVERSION ---------------
 --------------------------------------------------
 
-def parents_to_vtree_improved [n] (parents: [n]i64) = -- assumes parent of root is -1
+def parents_to_vtree [n] (parents: [n]i64) = -- assumes parent of root is -1
     let idxs = iota n
     let sort_by_parents = radix_sort_int_by_key (\p -> p.0) i64.num_bits i64.get_bit (zip parents idxs)
 

@@ -3,7 +3,7 @@
 
 
 # General commands
-all: test benchmark plot
+all: test plot
 
 clean:
 	rm -fr data lib futhark.pkg *.actual *.expected \
@@ -11,7 +11,7 @@ clean:
 
 
 # Analysis
-test: lib tests.fut
+test: data lib tests.fut
 	printf "\n\n--------------------------------------------\n\
 ----------- TESTING SEQUENTIAL -------------\n\
 --------------------------------------------\n\n"
@@ -25,46 +25,52 @@ benchmark: data
 	printf "\n\n--------------------------------------------\n\
 ----------- BENCHMARKS C BACKEND -----------\n\
 --------------------------------------------\n\n"
-	futhark bench --backend=c --json tests-c.json tests.fut
+	futhark bench --backend=c tests.fut
 	printf "\n\n--------------------------------------------\n\
 ----------- BENCHMARKS CUDA BACKEND --------\n\
 --------------------------------------------\n\n"
-	futhark bench --backend=cuda --json tests-cuda.json tests.fut
+	futhark bench --backend=cuda tests.fut
 	printf "\n\n--------------------------------------------\n\
 ----------- BENCHMARKS OPENCL BACKEND ------\n\
 --------------------------------------------\n\n"
-	futhark bench --backend=opencl --json tests-opencl.json tests.fut
+	futhark bench --backend=opencl tests.fut
 
 
 # Benchmark plotting
-plot: conv_naive.pdf conv_improved.pdf conv_comparison.pdf \
-	  naive_parallel.pdf improved_parallel.pdf
+plot: conv_constrained.pdf conv_general.pdf \
+	  conv_sequential_comparison.pdf conv_parallel_comparison.pdf \
+	  conv_constrained_parallel.pdf conv_general_parallel.pdf
 
-conv_comparison.pdf: plot.py tests-c.json tests-cuda.json
-	python3 plot.py conv_comparison tests:cuda:flat_naive,chain_naive,binary_naive \
-							   	    tests:cuda:flat_improved,chain_improved,binary_improved \
-							   		$(SIZES)
+conv_constrained.pdf: plot.py tests-c.json tests-cuda.json
+	python3 plot.py conv_constrained tests:c:flat_constrained,chain_constrained,binary_constrained \
+							   		 tests:cuda:flat_constrained,chain_constrained,binary_constrained \
+							   		 $(SIZES)
 
-conv_naive.pdf: plot.py tests-c.json tests-cuda.json
-	python3 plot.py conv_naive tests:c:flat_naive,chain_naive,binary_naive \
-							   tests:cuda:flat_naive,chain_naive,binary_naive \
-							   $(SIZES)
+conv_general.pdf: plot.py tests-c.json tests-cuda.json
+	python3 plot.py conv_general tests:c:flat_general,chain_general,binary_general,random_general \
+							 	 tests:cuda:flat_general,chain_general,binary_general,random_general \
+							 	 $(SIZES)
 
-conv_improved.pdf: plot.py tests-c.json tests-cuda.json
-	python3 plot.py conv_improved tests:c:flat_improved,chain_improved,binary_improved,random_improved \
-							 	  tests:cuda:flat_improved,chain_improved,binary_improved,random_improved \
-							 	  $(SIZES)
+conv_sequential_comparison.pdf: plot.py tests-c.json
+	python3 plot.py conv_sequential_comparison tests:c:flat_constrained,chain_constrained,binary_constrained \
+							   	    		   tests:c:flat_general,chain_general,binary_general \
+							   				   $(SIZES)
+
+conv_parallel_comparison.pdf: plot.py tests-cuda.json
+	python3 plot.py conv_parallel_comparison tests:cuda:flat_constrained,chain_constrained,binary_constrained \
+							   	    		 tests:cuda:flat_general,chain_general,binary_general \
+							   				 $(SIZES)
 
 
-naive_parallel.pdf: plot.py tests-c.json tests-cuda.json tests-opencl.json
-	python3 plot.py naive_parallel tests:cuda:flat_naive,chain_naive,binary_naive \
-							       tests:opencl:flat_naive,chain_naive,binary_naive \
-							       $(SIZES)
+conv_constrained_parallel.pdf: plot.py tests-cuda.json tests-opencl.json
+	python3 plot.py conv_constrained_parallel tests:cuda:flat_constrained,chain_constrained,binary_constrained \
+							       			  tests:opencl:flat_constrained,chain_constrained,binary_constrained \
+							       			  $(SIZES)
 
-improved_parallel.pdf: plot.py tests-c.json tests-cuda.json tests-opencl.json
-	python3 plot.py improved_parallel tests:cuda:flat_improved,chain_improved,binary_improved,random_improved \
-							 	      tests:opencl:flat_improved,chain_improved,binary_improved,random_improved \
-							 	      $(SIZES)
+conv_general_parallel.pdf: plot.py tests-cuda.json tests-opencl.json
+	python3 plot.py conv_general_parallel tests:cuda:flat_general,chain_general,binary_general,random_general \
+							 	          tests:opencl:flat_general,chain_general,binary_general,random_general \
+							 	          $(SIZES)
 
 
 # Data generation

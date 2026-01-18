@@ -99,7 +99,7 @@ def undirected_vgraph_to_parents_outer [m] [n] (vgraph: ([m]i64, [n]i64, [m]f32)
 -- tree given the 'root' index.
 -- Makes no assumptions (but sacrifices speed).
 -- Work: O(d * n), Span: O(d * lg n) <d: tree depth>.
-def undirected_vgraph_to_parents_full [m] [n] (root: i64)
+def undirected_vgraph_to_parents_naive [m] [n] (root: i64)
 									  (vgraph: ([m]i64, [n]i64, [m]f32)) =
 	
 	let (segments, pointers, _) = vgraph
@@ -144,16 +144,16 @@ def undirected_vgraph_to_parents_full [m] [n] (root: i64)
 
 -- | Converts from an undirected graph to a parents array
 -- given constraint type and parents conversion function.
-def undirected_vgraph_to_vtree [m] [n] 't (constr: constraint)
-							   (parents_conv: [m]i64 -> ([]t, []t))
-							   (root: i64)
-							   (vgraph: ([m]i64, [n]i64, [m]f32)) =
+def undirected_vgraph_to_vtree_constrained [m] [n] 't (constr: constraint)
+							   			   (parents_conv: [m]i64 -> ([]t, []t))
+							   			   (root: i64)
+							   			   (vgraph: ([m]i64, [n]i64, [m]f32)) =
 
 	let (parents, _) =
 		match constr
 			case #inner -> undirected_vgraph_to_parents_inner root vgraph
 			case #outer -> undirected_vgraph_to_parents_outer vgraph
-			case #full  -> undirected_vgraph_to_parents_full root vgraph
+			case #full  -> undirected_vgraph_to_parents_naive root vgraph
 	
 	in parents_conv (parents :> [m]i64)
 
@@ -164,7 +164,7 @@ def undirected_vgraph_to_vtree [m] [n] 't (constr: constraint)
 ------------ IMPROVED IMPLEMENTATION -------------
 --------------------------------------------------
 
-def undirected_vgraph_to_vtree_improved [n] [m] (S: [n]u32) (cross_pointers: [m]i64) (root: i64) =
+def undirected_vgraph_to_vtree [n] [m] (S: [n]u32) (cross_pointers: [m]i64) (root: i64) =
     let idxs = iota n
     let (_, flags) = mkFlagArray S 0 idxs
     let II1 = (sgmScan (+) 0 (map bool.i64 flags) flags :> [m]i64)
@@ -181,7 +181,7 @@ def undirected_vgraph_to_vtree_improved [n] [m] (S: [n]u32) (cross_pointers: [m]
     
     let parents = radix_sort_int_by_key (\p -> p.1) i64.num_bits i64.get_bit (directed_edges ++ [(-1, root)]) 
                   |> unzip |> (.0)
-    in parents_to_vtree_improved (parents)
+    in parents_to_vtree (parents)
 
 
 
@@ -189,49 +189,6 @@ def undirected_vgraph_to_vtree_improved [n] [m] (S: [n]u32) (cross_pointers: [m]
 --------------------------------------------------
 --------------- (INLINED FUNCTIONS) --------------
 --------------------------------------------------
-
-def parents_to_vtree_naive' [n] (parents: [n]i64) =
-
-	let sizes_ = replicate n 1i64
-	let depths_ = map (\p -> if p == -1 then 0 else 1) parents
-
-	let (sizes, depths, _) =
-		loop (sizes_, depths_, parents)
-		while any (\x -> x != -1) parents do
-
-			let depths = 
-				map (\i -> 
-					if parents[i] == -1 then depths_[i] 
-					else depths_[i] + depths_[parents[i]]) 
-				(iota n)
-
-			let sizes = reduce_by_index sizes_ (+) 0 parents (copy sizes_)
-
-			let parents' =
-				map (\p -> 
-					if p == -1 then -1
-					else parents[p]
-				) parents
-
-			in  (sizes, depths, parents')	
-
-	let depths_prev = rotate (-1) depths
-	let left_offsets = 
-		map2 (\d_curr d_prev ->
-			if d_curr == 0 then 0
-			else d_prev - d_curr + 2
-		) depths depths_prev
-	
-	let left_paren = scan (+) 0 left_offsets 
-
-	let right_paren = 
-		map2 (\left size ->
-			left + size * 2 - 1
-		) left_paren sizes
-	
-	in (left_paren, right_paren)
-
-
 
 def undirected_vgraph_to_parents_inner' [m] [n] (root: i64) 
 									   (vgraph: ([m]i64, [n]i64, [m]f32)) =
@@ -294,7 +251,7 @@ def undirected_vgraph_to_parents_outer' [m] [n] (vgraph: ([m]i64, [n]i64, [m]f32
 
 
 
-def undirected_vgraph_to_parents_full' [m] [n] (root: i64)
+def undirected_vgraph_to_parents_naive' [m] [n] (root: i64)
 									  (vgraph: ([m]i64, [n]i64, [m]f32)) =
 	
 	let (segments, pointers, values) = vgraph
