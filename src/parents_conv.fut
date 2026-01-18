@@ -79,7 +79,7 @@ def parents_to_vtree_constrained [n] (parents: [n]i64) =
 -------------- ADVANCED CONVERSION ---------------
 --------------------------------------------------
 
-def parents_to_vtree [n] (parents: [n]i64) = -- assumes parent of root is -1
+def parents_to_vtree [n] (parents: [n]i64): ([n]i64, [n]i64) = -- assumes parent of root is -1
     let idxs = iota n
     let sort_by_parents = radix_sort_int_by_key (\p -> p.0) i64.num_bits i64.get_bit (zip parents idxs)
 
@@ -100,7 +100,6 @@ def parents_to_vtree [n] (parents: [n]i64) = -- assumes parent of root is -1
     let exit_succ = map2 (\p s -> if s != -1 then s 
                                   else if p != -1 then n+p 
                                   else 2*n) parents next_sibling
-    let ranks = map (2*i32.i64 n-) (wyllie (enter_succ ++ exit_succ))
-			    |> map i64.i32
+    let ranks = map (\x -> 2*n-i64.i32 x) (wyllie (enter_succ ++ exit_succ))
 
-    in (ranks[0:n], ranks[n:2*n])
+    in (ranks[0:n], ranks[n:] :> [n]i64)

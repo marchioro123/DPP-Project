@@ -9,7 +9,8 @@ import "lib/github.com/diku-dk/sorts/radix_sort"
 ------------------ CONVERSION --------------------
 --------------------------------------------------
 
-def directed_vgraph_to_vtree [n] [m] (S_out: [n]u32) (S_in: [n]u32) (cross_pointers: [m]i64) =
+def directed_vgraph_to_vtree [n] [m] (S_out: [n]u32) (S_in: [n]u32)     
+                                     (cross_pointers: [m]i64) =  -- : ([n]i64, [n]i64) =
     let (_, flags) = mkFlagArray S_out 0 (iota n)
     let II1 = (sgmScan (+) 0 (map bool.i64 flags) flags :> [m]i64)
 
