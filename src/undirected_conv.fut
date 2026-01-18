@@ -164,7 +164,8 @@ def undirected_vgraph_to_vtree_constrained [m] [n] 't (constr: constraint)
 ------------ IMPROVED IMPLEMENTATION -------------
 --------------------------------------------------
 
-def undirected_vgraph_to_vtree [n] [m] (S: [n]u32) (cross_pointers: [m]i64) (root: i64) =
+def undirected_vgraph_to_vtree [n] [m] (S: [n]u32) (cross_pointers: [m]i64) 
+									   (root: i64): ([n]i64, [n]i64) =
     let idxs = iota n
     let (_, flags) = mkFlagArray S 0 idxs
     let II1 = (sgmScan (+) 0 (map bool.i64 flags) flags :> [m]i64)
@@ -181,7 +182,7 @@ def undirected_vgraph_to_vtree [n] [m] (S: [n]u32) (cross_pointers: [m]i64) (roo
     
     let parents = radix_sort_int_by_key (\p -> p.1) i64.num_bits i64.get_bit (directed_edges ++ [(-1, root)]) 
                   |> unzip |> (.0)
-    in parents_to_vtree (parents)
+    in parents_to_vtree (parents :> [n]i64)
 
 
 
